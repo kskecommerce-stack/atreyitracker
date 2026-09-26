@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>EduTrack Permanent Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --tuition: #d97706;
+      --self: #16a34a;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background: var(--bg); color: var(--text); padding-bottom: 90px; }
+    .container { max-width: 480px; margin: 0 auto; padding: 14px; }
+    
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      color: #166534;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .title { font-size: 18px; font-weight: 800; color: var(--primary); }
+
+    /* Stopwatch */
+    .timer-screen { font-family: 'JetBrains Mono', monospace; font-size: 38px; font-weight: 800; text-align: center; margin: 10px 0; }
+    .btn-row { display: flex; gap: 8px; justify-content: center; }
+    button { cursor: pointer; border: none; font-weight: 700; border-radius: 12px; padding: 10px 14px; font-size: 13px; }
+    .btn-blue { background: var(--primary); color: white; }
+    .btn-save { background: #16a34a; color: white; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-gray { background: #e2e8f0; color: var(--text); }
+
+    /* Bottom Navigation */
+    .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); display: flex; justify-content: space-around; padding: 10px 0; border-top: 1px solid var(--border); max-width: 480px; margin: 0 auto; }
+    .tab-item { background: none; color: var(--muted); font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .tab-item.active { color: var(--primary); font-weight: 800; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Graph Canvas */
+    .chart-box { height: 230px; position: relative; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Storage Shield Indicator -->
+    <div class="status-bar" id="storageStatus">
+      <span>🔒 Storage Mode: Permanent Phone Database</span>
+      <span id="recordCount">0 Records</span>
+    </div>
+
+    <!-- TAB 1: VISUAL GRAPHS (Always visible upon opening) -->
+    <div id="tab-graphs" class="tab-content active">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-weight: 800; font-size: 15px;">📊 Hours Spent Analysis</span>
+          <button class="btn-gray" style="padding:4px 8px; font-size:10px;" onclick="loadSampleData()">+ Test Data</button>
+        </div>
+        <div class="chart-box">
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <span style="font-weight: 800; font-size: 15px;">🍩 School vs Tuition Ratio</span>
+        <div class="chart-box" style="height: 180px;">
+          <canvas id="pieChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: TRACKER / PUNCH -->
+    <div id="tab-tracker" class="tab-content">
+      <div class="card" style="text-align:center;">
+        <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase;">Session Timer</div>
+        <div class="timer-screen" id="timerDisplay">00:00:00</div>
+
+        <div style="margin-bottom:12px;">
+          <select id="sessionType" style="padding:8px 12px; border-radius:10px; border:1px solid var(--border); font-weight:700;">
+            <option value="School">School Hours 🏫</option>
+            <option value="Tuition">Tuition Class 📚</option>
+            <option value="Self Study">Self Study 📖</option>
+          </select>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-blue" id="startBtn" onclick="toggleTimer()">▶ Start</button>
+          <button class="btn-save" onclick="saveCurrentSession()">💾 Save Session</button>
+          <button class="btn-gray" onclick="resetTimer()">↺</button>
+        </div>
+      </div>
+
+      <!-- Logged list -->
+      <div class="card">
+        <div style="font-weight:800; font-size:14px; margin-bottom:10px;">Logged Timings (Saved to Disk)</div>
+        <div id="historyList" style="font-size:12px; color:var(--muted);">No sessions saved yet.</div>
+      </div>
+    </div>
+
+    <!-- TAB 3: BACKUP FILE (SAFEGUARD) -->
+    <div id="tab-backup" class="tab-content">
+      <div class="card">
+        <h4 style="font-size:15px; margin-bottom:8px;">📁 Zero-Data-Loss Safety</h4>
+        <p style="font-size:12px; color:var(--muted); margin-bottom:14px;">
+          Your data is permanently saved inside your phone's IndexedDB. You can also download a physical backup file anytime with 1 tap.
+        </p>
+        <button class="btn-save" style="width:100%; margin-bottom:10px;" onclick="downloadBackupFile()">⬇️ Download Backup File (.json)</button>
+        <button class="btn-blue" style="width:100%;" onclick="document.getElementById('importFile').click()">⬆️ Restore From File</button>
+        <input type="file" id="importFile" style="display:none" onchange="restoreFromFile(event)" accept=".json" />
+        
+        <button class="btn-danger" style="width:100%; margin-top:20px; background:none; color:#dc2626; border:1px solid #fca5a5;" onclick="clearDatabase()">Clear All Records</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <div class="tab-bar">
+    <button class="tab-item active" onclick="switchTab('graphs', this)"><span>📊</span><span>Analytics</span></button>
+    <button class="tab-item" onclick="switchTab('tracker', this)"><span>⏱️</span><span>Tracker</span></button>
+    <button class="tab-item" onclick="switchTab('backup', this)"><span>💾</span><span>Data Safe</span></button>
+  </div>
+
+  <script>
+    // 1. INITIALIZE PERMANENT HARDWARE STORAGE (IndexedDB)
+    const DB_NAME = "EduTrackPermanentDB";
+    const STORE_NAME = "sessions";
+    let db;
+
+    function openDatabase() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          }
+        };
+        req.onsuccess = (e) => {
+          db = e.target.result;
+          // Request Android OS to grant persistent non-volatile storage
+          if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().then(granted => {
+              console.log("Persistent disk storage granted by phone:", granted);
+            });
+          }
+          resolve(db);
+        };
+        req.onerror = () => reject("Failed to initialize database");
+      });
+    }
+
+    async function getAllRecords() {
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+      });
+    }
+
+    async function insertRecord(record) {
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        store.put(record);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    // 2. TAB CONTROLLER
+    function switchTab(id, btn) {
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.add('active');
+      document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      if (id === 'graphs') refreshCharts();
+      if (id === 'tracker') refreshHistoryList();
+    }
+
+    // 3. STOPWATCH & SAVING
+    let timerInterval = null;
+    let timerSeconds = 0;
+    let isRunning = false;
+
+    function toggleTimer() {
+      const btn = document.getElementById('startBtn');
+      if (!isRunning) {
+        isRunning = true;
+        btn.textContent = "⏸ Pause";
+        btn.style.background = "#dc2626";
+        timerInterval = setInterval(() => {
+          timerSeconds++;
+          const h = String(Math.floor(timerSeconds / 3600)).padStart(2, '0');
+          const m = String(Math.floor((timerSeconds % 3600) / 60)).padStart(2, '0');
+          const s = String(timerSeconds % 60).padStart(2, '0');
+          document.getElementById('timerDisplay').textContent = `${h}:${m}:${s}`;
+        }, 1000);
+      } else {
+        isRunning = false;
+        clearInterval(timerInterval);
+        btn.textContent = "▶ Resume";
+        btn.style.background = "#2563eb";
+      }
+    }
+
+    function resetTimer() {
+      isRunning = false;
+      clearInterval(timerInterval);
+      timerSeconds = 0;
+      document.getElementById('timerDisplay').textContent = "00:00:00";
+      document.getElementById('startBtn').textContent = "▶ Start";
+      document.getElementById('startBtn').style.background = "#2563eb";
+    }
+
+    async function saveCurrentSession() {
+      if (timerSeconds < 5) {
+        alert("Session must be at least 5 seconds long to save!");
+        return;
+      }
+      const type = document.getElementById('sessionType').value;
+      const mins = Math.max(1, Math.round(timerSeconds / 60));
+
+      const newRecord = {
+        id: "session_" + Date.now(),
+        type: type,
+        minutes: mins,
+        rawSeconds: timerSeconds,
+        date: new Date().toLocaleDateString(),
+        dayOfWeek: new Date().getDay(),
+        timestamp: new Date().toISOString()
+      };
+
+      await insertRecord(newRecord);
+      resetTimer();
+      alert(`Permanently saved ${mins} mins for ${type}!`);
+      refreshHistoryList();
+      refreshCharts();
+    }
+
+    // 4. CHART RENDERING
+    let barChart, pieChart;
+
+    function initCharts() {
+      const barCtx = document.getElementById('barChart').getContext('2d');
+      barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          datasets: [
+            { label: 'School (h)', data: [0,0,0,0,0,0,0], backgroundColor: '#2563eb', borderRadius: 6 },
+            { label: 'Tuition (h)', data: [0,0,0,0,0,0,0], backgroundColor: '#d97706', borderRadius: 6 },
+            { label: 'Self Study (h)', data: [0,0,0,0,0,0,0], backgroundColor: '#16a34a', borderRadius: 6 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true }
+          }
+        }
+      });
+
+      const pieCtx = document.getElementById('pieChart').getContext('2d');
+      pieChart = new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['School', 'Tuition', 'Self Study'],
+          datasets: [{ data: [0, 0, 0], backgroundColor: ['#2563eb', '#d97706', '#16a34a'] }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    async function refreshCharts() {
+      const records = await getAllRecords();
+      document.getElementById('recordCount').textContent = `${records.length} Records Saved`;
+
+      const dayIdxMap = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 };
+      let schoolByDay = [0,0,0,0,0,0,0];
+      let tuitionByDay = [0,0,0,0,0,0,0];
+      let selfByDay = [0,0,0,0,0,0,0];
+
+      let totSchool = 0, totTuition = 0, totSelf = 0;
+
+      records.forEach(r => {
+        const d = dayIdxMap[r.dayOfWeek !== undefined ? r.dayOfWeek : new Date(r.timestamp).getDay()];
+        const hrs = Number((r.minutes / 60).toFixed(2));
+        if (r.type === 'School') { schoolByDay[d] += hrs; totSchool += r.minutes; }
+        else if (r.type === 'Tuition') { tuitionByDay[d] += hrs; totTuition += r.minutes; }
+        else { selfByDay[d] += hrs; totSelf += r.minutes; }
+      });
+
+      if (barChart && pieChart) {
+        barChart.data.datasets[0].data = schoolByDay;
+        barChart.data.datasets[1].data = tuitionByDay;
+        barChart.data.datasets[2].data = selfByDay;
+        barChart.update();
+
+        pieChart.data.datasets[0].data = [totSchool, totTuition, totSelf];
+        pieChart.update();
+      }
+    }
+
+    async function refreshHistoryList() {
+      const records = await getAllRecords();
+      const container = document.getElementById('historyList');
+      if (!records.length) {
+        container.innerHTML = "No sessions logged yet.";
+        return;
+      }
+      container.innerHTML = records.slice(-5).reverse().map(r => `
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9;">
+          <span><b>${r.type}</b> (${r.date})</span>
+          <span>${r.minutes} min</span>
+        </div>
+      `).join('');
+    }
+
+    // 5. HARDWARE BACKUP FILE EXPORT & IMPORT
+    async function downloadBackupFile() {
+      const records = await getAllRecords();
+      const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `edutrack_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    }
+
+    function restoreFromFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          for (const item of imported) {
+            await insertRecord(item);
+          }
+          alert("All records successfully restored!");
+          refreshCharts();
+          refreshHistoryList();
+        } catch(err) {
+          alert("Invalid backup file.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function loadSampleData() {
+      const sample = [
+        { id: "s1", type: "School", minutes: 300, dayOfWeek: 1, date: "Sample Mon", timestamp: new Date().toISOString() },
+        { id: "s2", type: "Tuition", minutes: 90, dayOfWeek: 1, date: "Sample Mon", timestamp: new Date().toISOString() },
+        { id: "s3", type: "School", minutes: 300, dayOfWeek: 2, date: "Sample Tue", timestamp: new Date().toISOString() },
+        { id: "s4", type: "Tuition", minutes: 120, dayOfWeek: 2, date: "Sample Tue", timestamp: new Date().toISOString() },
+        { id: "s5", type: "Self Study", minutes: 60, dayOfWeek: 2, date: "Sample Tue", timestamp: new Date().toISOString() }
+      ];
+      for (const item of sample) {
+        await insertRecord(item);
+      }
+      refreshCharts();
+      refreshHistoryList();
+    }
+
+    function clearDatabase() {
+      if (confirm("Delete all tracked timings from your phone?")) {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).clear();
+        tx.oncomplete = () => {
+          refreshCharts();
+          refreshHistoryList();
+          alert("Database wiped.");
+        };
+      }
+    }
+
+    // Auto-boot
+    window.addEventListener('DOMContentLoaded', async () => {
+      await openDatabase();
+      initCharts();
+      refreshCharts();
+      refreshHistoryList();
+    });
+  </script>
+</body>
+</html>
